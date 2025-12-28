@@ -52,10 +52,13 @@ export function HealthChart({ records, selectedMetrics, onMetricChange, metricNa
             <SelectValue placeholder="Select metric" />
           </SelectTrigger>
           <SelectContent>
-            {metricNames.map(name => (
-              <SelectItem key={name} value={name}>{name}</SelectItem>
-            ))}
-          </SelectContent>
+  {metricNames.map((name) => (
+    // We add (name || "Unknown") to ensure the value is NEVER an empty string
+    <SelectItem key={name || "unknown"} value={name || "Unknown"}>
+      {name || "Unknown Metric"}
+    </SelectItem>
+  ))}
+</SelectContent>
         </Select>
       </CardHeader>
       <CardContent>

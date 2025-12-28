@@ -1,186 +1,69 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
-import { HealthRecord } from '@/lib/types';
-import { useToast } from '@/hooks/use-toast';
+
+export interface HealthRecord {
+  id?: number;
+  metric_name: string;
+  metric_value: number;
+  unit: string;
+  test_date: string;
+  user_id?: string;
+}
 
 export function useHealthRecords() {
   const { user } = useAuth();
-  const { toast } = useToast();
   const [records, setRecords] = useState<HealthRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const fetchRecords = useCallback(async () => {
-    if (!user) {
-      setRecords([]);
-      setLoading(false);
-      return;
-    }
-
+    if (!user) return;
     try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('health_records')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('test_date', { ascending: false });
-
-      if (error) throw error;
-      setRecords(data || []);
-      setError(null);
-    } catch (err) {
-      console.error('Error fetching health records:', err);
-      setError('Failed to load health records');
-      toast({
-        title: "Error",
-        description: "Failed to load health records",
-        variant: "destructive",
-      });
+      const res = await fetch(`http://localhost:3000/records/${user.id}`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      const data = await res.json();
+      setRecords(data);
+    } catch (error) {
+      console.error("Error fetching records:", error);
     } finally {
       setLoading(false);
     }
-  }, [user, toast]);
+  }, [user]);
 
-  useEffect(() => {
-    fetchRecords();
-  }, [fetchRecords]);
-
-  const addRecord = async (record: Omit<HealthRecord, 'id' | 'user_id' | 'created_at' | 'updated_at'>) => {
-    if (!user) return { error: new Error('Not authenticated') };
+  const uploadFile = async (file: File) => {
+    if (!user) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('userId', user.id);
 
     try {
-      const { data, error } = await supabase
-        .from('health_records')
-        .insert({
-          ...record,
-          user_id: user.id,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      setRecords(prev => [data, ...prev].sort((a, b) => 
-        new Date(b.test_date).getTime() - new Date(a.test_date).getTime()
-      ));
-      
-      toast({
-        title: "Success",
-        description: "Health record added successfully",
+      const res = await fetch('http://localhost:3000/upload', {
+        method: 'POST',
+        body: formData,
       });
-      
-      return { data, error: null };
-    } catch (err) {
-      console.error('Error adding health record:', err);
-      toast({
-        title: "Error",
-        description: "Failed to add health record",
-        variant: "destructive",
-      });
-      return { error: err as Error };
+      const data = await res.json();
+      if (data.success) {
+        await fetchRecords(); 
+        return data.records;
+      }
+    } catch (error) {
+      console.error("Upload error:", error);
     }
   };
 
-  const addMultipleRecords = async (newRecords: Array<Omit<HealthRecord, 'id' | 'user_id' | 'created_at' | 'updated_at'>>) => {
-    if (!user) return { error: new Error('Not authenticated') };
-
+  const addMultipleRecords = async (newRecords: HealthRecord[]) => {
+    if (!user) return;
     try {
-      const recordsWithUserId = newRecords.map(r => ({
-        ...r,
-        user_id: user.id,
-      }));
-
-      const { data, error } = await supabase
-        .from('health_records')
-        .insert(recordsWithUserId)
-        .select();
-
-      if (error) throw error;
-      
-      setRecords(prev => [...(data || []), ...prev].sort((a, b) => 
-        new Date(b.test_date).getTime() - new Date(a.test_date).getTime()
-      ));
-      
-      toast({
-        title: "Success",
-        description: `${data?.length || 0} health records imported successfully`,
+      const res = await fetch('http://localhost:3000/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, records: newRecords })
       });
-      
-      return { data, error: null };
-    } catch (err) {
-      console.error('Error adding health records:', err);
-      toast({
-        title: "Error",
-        description: "Failed to import health records",
-        variant: "destructive",
-      });
-      return { error: err as Error };
+      if (res.ok) await fetchRecords();
+    } catch (error) {
+      console.error("Manual add error:", error);
     }
   };
 
-  const updateRecord = async (id: string, updates: Partial<HealthRecord>) => {
-    try {
-      const { data, error } = await supabase
-        .from('health_records')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      setRecords(prev => prev.map(r => r.id === id ? data : r));
-      
-      toast({
-        title: "Success",
-        description: "Health record updated successfully",
-      });
-      
-      return { data, error: null };
-    } catch (err) {
-      console.error('Error updating health record:', err);
-      toast({
-        title: "Error",
-        description: "Failed to update health record",
-        variant: "destructive",
-      });
-      return { error: err as Error };
-    }
-  };
-
-  const deleteRecord = async (id: string) => {
-    try {
-      const { error } = await supabase
-        .from('health_records')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      
-      setRecords(prev => prev.filter(r => r.id !== id));
-      
-      toast({
-        title: "Success",
-        description: "Health record deleted successfully",
-      });
-      
-      return { error: null };
-    } catch (err) {
-      console.error('Error deleting health record:', err);
-      toast({
-        title: "Error",
-        description: "Failed to delete health record",
-        variant: "destructive",
-      });
-      return { error: err as Error };
-    }
-  };
-
-  // Get unique metric names from records
-  const metricNames = [...new Set(records.map(r => r.metric_name))];
-
-  // Get chart data for a specific metric
   const getChartData = (metricName: string) => {
     return records
       .filter(r => r.metric_name === metricName)
@@ -192,16 +75,11 @@ export function useHealthRecords() {
       }));
   };
 
-  return {
-    records,
-    loading,
-    error,
-    metricNames,
-    fetchRecords,
-    addRecord,
-    addMultipleRecords,
-    updateRecord,
-    deleteRecord,
-    getChartData,
-  };
+  const metricNames = [...new Set(records.map(r => r.metric_name))];
+
+  useEffect(() => {
+    fetchRecords();
+  }, [fetchRecords]);
+
+  return { records, loading, uploadFile, addMultipleRecords, getChartData, metricNames };
 }

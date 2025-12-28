@@ -1,19 +1,22 @@
 import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
+import { useNavigate } from 'react-router-dom'; // Added for redirect
 import { Upload, FileText, X, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { ParsedHealthData } from '@/lib/types';
+import { useHealthRecords } from '@/hooks/useHealthRecords'; // Uses your new local hook
 
 interface FileUploadZoneProps {
-  onDataParsed: (data: ParsedHealthData) => void;
+  onDataParsed: (data: any) => void;
 }
 
 export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { uploadFile } = useHealthRecords(); // Connects to localhost:3000
+  
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -25,74 +28,42 @@ export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
     }
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    onDrop,
-    accept: {
-      'text/plain': ['.txt'],
-      'application/pdf': ['.pdf'],
-    },
-    maxFiles: 1,
-    maxSize: 5 * 1024 * 1024, // 5MB
-  });
-
-  const readFileContent = async (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target?.result as string);
-      reader.onerror = reject;
-      reader.readAsText(file);
-    });
-  };
-
+// Find this section in your FileUploadZone.tsx and modify it:
+const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  onDrop,
+  accept: {
+    'text/plain': ['.txt'],      // Existing TXT support
+    'application/pdf': ['.pdf'],  // ADD THIS LINE
+  },
+  maxFiles: 1,
+});
   const processFile = async () => {
     if (!file) return;
 
     setUploading(true);
-    setProgress(20);
+    setProgress(30);
 
     try {
-      let fileContent: string;
-
-      if (file.type === 'application/pdf') {
-        // For PDFs, we'll send the base64 content
-        const arrayBuffer = await file.arrayBuffer();
-        const base64 = btoa(
-          new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-        );
-        fileContent = `[PDF Content - Base64 encoded]\n${base64.substring(0, 50000)}`; // Limit size
-      } else {
-        fileContent = await readFileContent(file);
-      }
-
-      setProgress(50);
-
-      const { data, error } = await supabase.functions.invoke('parse-health-file', {
-        body: { fileContent, fileName: file.name },
-      });
-
-      setProgress(80);
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to parse file');
-      }
-
+      // 1. Send to your local backend
+      const records = await uploadFile(file);
+      
       setProgress(100);
-      onDataParsed(data);
-
+      
       toast({
-        title: "File processed successfully",
-        description: `Found ${data.metrics?.length || 0} health metrics`,
+        title: "Success!",
+        description: "File processed and saved. Redirecting to records...",
       });
+
+      // 2. Redirect to Records page to see the chart
+      setTimeout(() => {
+          navigate('/records');
+      }, 1000);
 
     } catch (err) {
       console.error('Error processing file:', err);
       toast({
-        title: "Error processing file",
-        description: err instanceof Error ? err.message : "Unknown error occurred",
+        title: "Connection Error",
+        description: "Could not connect to backend. Is 'node server.js' running?",
         variant: "destructive",
       });
     } finally {
@@ -114,7 +85,7 @@ export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
           Upload Health Data
         </CardTitle>
         <CardDescription>
-          Upload your blood test results or medical reports (TXT or PDF)
+          Upload your blood test results (TXT or PDF files)
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -136,7 +107,7 @@ export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
               {isDragActive ? 'Drop your file here' : 'Drag & drop your file here'}
             </p>
             <p className="text-sm text-muted-foreground">
-              or click to browse (TXT, PDF - max 5MB)
+              or click to browse (.txt)
             </p>
           </div>
         ) : (
@@ -160,7 +131,7 @@ export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
               <div className="space-y-2">
                 <Progress value={progress} className="h-2" />
                 <p className="text-sm text-muted-foreground text-center">
-                  Processing file with AI...
+                  Sending to local backend...
                 </p>
               </div>
             )}
@@ -178,7 +149,7 @@ export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
               ) : (
                 <>
                   <Upload className="h-4 w-4 mr-2" />
-                  Process File
+                  Upload & Process
                 </>
               )}
             </Button>
