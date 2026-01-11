@@ -15,8 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { HealthRecord } from '@/lib/types';
-import { useHealthRecords } from '@/hooks/useHealthRecords';
+import { HealthRecord, useHealthRecords } from '@/hooks/useHealthRecords';
 
 interface RecordsTableProps {
   records: HealthRecord[];
@@ -24,10 +23,11 @@ interface RecordsTableProps {
 
 export function RecordsTable({ records }: RecordsTableProps) {
   const { updateRecord, deleteRecord } = useHealthRecords();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
 
   const startEdit = (record: HealthRecord) => {
+    if (!record.id) return;
     setEditingId(record.id);
     setEditValue(record.metric_value.toString());
   };
@@ -37,17 +37,18 @@ export function RecordsTable({ records }: RecordsTableProps) {
     setEditValue('');
   };
 
-  const saveEdit = async (id: string) => {
+  const saveEdit = async (id: number) => {
+    if (!editValue || isNaN(Number(editValue))) return;
     await updateRecord(id, { metric_value: parseFloat(editValue) });
-    setEditingId(null);
-    setEditValue('');
+    cancelEdit();
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: number) => {
+    if (!confirm('Are you sure you want to delete this record?')) return;
     await deleteRecord(id);
   };
 
-  if (records.length === 0) {
+  if (!records || records.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground">
         <p className="text-lg">No health records yet</p>
@@ -72,11 +73,11 @@ export function RecordsTable({ records }: RecordsTableProps) {
         <TableBody>
           {records.map((record) => (
             <TableRow key={record.id}>
-              <TableCell className="font-medium">
+              <TableCell>
                 {new Date(record.test_date).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
-                  year: 'numeric'
+                  year: 'numeric',
                 })}
               </TableCell>
               <TableCell>{record.metric_name}</TableCell>
@@ -91,10 +92,10 @@ export function RecordsTable({ records }: RecordsTableProps) {
                     autoFocus
                   />
                 ) : (
-                  <span className="font-medium">{record.metric_value}</span>
+                  <span>{record.metric_value}</span>
                 )}
               </TableCell>
-              <TableCell className="text-muted-foreground">{record.unit}</TableCell>
+              <TableCell>{record.unit}</TableCell>
               <TableCell>
                 <Badge variant={record.source === 'file_upload' ? 'secondary' : 'outline'}>
                   {record.source === 'file_upload' ? 'Uploaded' : 'Manual'}
@@ -104,7 +105,7 @@ export function RecordsTable({ records }: RecordsTableProps) {
                 <div className="flex justify-end gap-1">
                   {editingId === record.id ? (
                     <>
-                      <Button variant="ghost" size="icon" onClick={() => saveEdit(record.id)}>
+                      <Button variant="ghost" size="icon" onClick={() => saveEdit(record.id!)}>
                         <Check className="h-4 w-4 text-success" />
                       </Button>
                       <Button variant="ghost" size="icon" onClick={cancelEdit}>
@@ -132,7 +133,7 @@ export function RecordsTable({ records }: RecordsTableProps) {
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
                             <AlertDialogAction 
-                              onClick={() => handleDelete(record.id)}
+                              onClick={() => handleDelete(record.id!)}
                               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                             >
                               Delete

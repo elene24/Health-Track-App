@@ -36,13 +36,15 @@ db.serialize(() => {
     metric_value REAL,
     unit TEXT,
     test_date TEXT,
+    notes TEXT,
+    source TEXT DEFAULT 'manual',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 });
 
 const upload = multer({ dest: 'uploads/' });
 
-// --- Authentication Endpoints ---
+// --- Authentication ---
 
 // SIGN UP
 app.post('/auth/signup', async (req, res) => {
@@ -85,7 +87,7 @@ app.post('/auth/signin', async (req, res) => {
   });
 });
 
-// --- Health Records Endpoints ---
+// --- Health Records ---
 
 // Upload File
 app.post('/upload', upload.single('file'), (req, res) => {
@@ -98,9 +100,11 @@ app.post('/upload', upload.single('file'), (req, res) => {
     const parsedRecords = parseHealthText(data, new Date().toISOString().split('T')[0]);
 
     if (parsedRecords.length > 0) {
-      const stmt = db.prepare("INSERT INTO records (user_id, metric_name, metric_value, unit, test_date) VALUES (?, ?, ?, ?, ?)");
+      const stmt = db.prepare(
+        "INSERT INTO records (user_id, metric_name, metric_value, unit, test_date, source) VALUES (?, ?, ?, ?, ?, ?)"
+      );
       parsedRecords.forEach(r => {
-        stmt.run(userId, r.metric_name, r.metric_value, r.unit, r.test_date);
+        stmt.run(userId, r.metric_name, r.metric_value, r.unit, r.test_date, 'file_upload');
       });
       stmt.finalize();
     }
@@ -113,10 +117,16 @@ app.post('/upload', upload.single('file'), (req, res) => {
 // Manual Add
 app.post('/add', (req, res) => {
   const { userId, records } = req.body;
-  const stmt = db.prepare("INSERT INTO records (user_id, metric_name, metric_value, unit, test_date) VALUES (?, ?, ?, ?, ?)");
+  if (!userId || !records || !records.length) return res.status(400).json({ error: 'Invalid request' });
+
+  const stmt = db.prepare(
+    "INSERT INTO records (user_id, metric_name, metric_value, unit, test_date, notes, source) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  );
+
   records.forEach(r => {
-    stmt.run(userId, r.metric_name, r.metric_value, r.unit, r.test_date);
+    stmt.run(userId, r.metric_name, r.metric_value, r.unit, r.test_date, r.notes || null, r.source || 'manual');
   });
+
   stmt.finalize();
   res.json({ success: true });
 });
@@ -125,15 +135,42 @@ app.post('/add', (req, res) => {
 app.get('/records/:userId', (req, res) => {
   const userId = req.params.userId;
   if (!userId || userId === 'undefined') return res.json([]);
-  
+
   db.all("SELECT * FROM records WHERE user_id = ? ORDER BY test_date DESC", [userId], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
 });
 
-// --- Utility Function ---
+// UPDATE a record
+app.put('/records/:id', (req, res) => {
+  const id = req.params.id;
+  const { metric_value, metric_name, unit, test_date, notes } = req.body;
 
+  db.run(
+    `UPDATE records 
+     SET metric_value = ?, metric_name = ?, unit = ?, test_date = ?, notes = ?
+     WHERE id = ?`,
+    [metric_value, metric_name, unit, test_date, notes, id],
+    function(err) {
+      if (err) return res.status(500).json({ error: err.message });
+      if (this.changes === 0) return res.status(404).json({ error: 'Record not found' });
+      res.json({ success: true });
+    }
+  );
+});
+
+// DELETE a record
+app.delete('/records/:id', (req, res) => {
+  const id = req.params.id;
+  db.run(`DELETE FROM records WHERE id = ?`, [id], function(err) {
+    if (err) return res.status(500).json({ error: err.message });
+    if (this.changes === 0) return res.status(404).json({ error: 'Record not found' });
+    res.json({ success: true });
+  });
+});
+
+// --- Utility Function ---
 function parseHealthText(text, defaultDate) {
   const lines = text.split('\n');
   const records = [];
