@@ -3,20 +3,17 @@ import { Plus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { COMMON_METRICS } from '@/lib/types';
 import { useHealthRecords } from '@/hooks/useHealthRecords';
 
-interface ManualEntryFormProps {
-  onSuccess?: () => void;
-}
-
-export function ManualEntryForm({ onSuccess }: ManualEntryFormProps) {
+export function ManualEntryForm() {
   const { addRecord } = useHealthRecords();
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formData, setFormData] = useState({
+  const [loading, setLoading] = useState(false);
+
+  const [form, setForm] = useState({
     metric_name: '',
     metric_value: '',
     unit: '',
@@ -24,130 +21,68 @@ export function ManualEntryForm({ onSuccess }: ManualEntryFormProps) {
     notes: '',
   });
 
-  const handleMetricSelect = (metricName: string) => {
-    const metric = COMMON_METRICS.find(m => m.name === metricName);
-    setFormData(prev => ({
-      ...prev,
-      metric_name: metricName,
-      unit: metric?.unit || prev.unit,
-    }));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
+    setLoading(true);
 
-    const { error } = await addRecord({
-      metric_name: formData.metric_name,
-      metric_value: parseFloat(formData.metric_value),
-      unit: formData.unit,
-      test_date: formData.test_date,
-      notes: formData.notes || null,
+    await addRecord({
+      metric_name: form.metric_name,
+      metric_value: Number(form.metric_value),
+      unit: form.unit,
+      test_date: form.test_date,
+      notes: form.notes || null,
       source: 'manual',
     });
 
-    setIsSubmitting(false);
+    setForm({
+      metric_name: '',
+      metric_value: '',
+      unit: '',
+      test_date: new Date().toISOString().split('T')[0],
+      notes: '',
+    });
 
-    if (!error) {
-      setFormData({
-        metric_name: '',
-        metric_value: '',
-        unit: '',
-        test_date: new Date().toISOString().split('T')[0],
-        notes: '',
-      });
-      onSuccess?.();
-    }
+    setLoading(false);
   };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Plus className="h-5 w-5 text-primary" />
-          Add Record Manually
-        </CardTitle>
-        <CardDescription>
-          Enter your health metrics manually
-        </CardDescription>
+        <CardTitle>Add Record Manually</CardTitle>
+        <CardDescription>Enter health metrics manually</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="metric">Metric</Label>
-              <Select value={formData.metric_name} onValueChange={handleMetricSelect}>
-                <SelectTrigger className="input-health">
-                  <SelectValue placeholder="Select metric" />
-                </SelectTrigger>
-                <SelectContent>
-                  {COMMON_METRICS.map(metric => (
-                    <SelectItem key={metric.name} value={metric.name}>
-                      {metric.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="test-date">Test Date</Label>
-              <Input
-                id="test-date"
-                type="date"
-                value={formData.test_date}
-                onChange={(e) => setFormData(prev => ({ ...prev, test_date: e.target.value }))}
-                className="input-health"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="value">Value</Label>
-              <Input
-                id="value"
-                type="number"
-                step="any"
-                placeholder="Enter value"
-                value={formData.metric_value}
-                onChange={(e) => setFormData(prev => ({ ...prev, metric_value: e.target.value }))}
-                className="input-health"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="unit">Unit</Label>
-              <Input
-                id="unit"
-                placeholder="e.g., mg/dL"
-                value={formData.unit}
-                onChange={(e) => setFormData(prev => ({ ...prev, unit: e.target.value }))}
-                className="input-health"
-                required
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="notes">Notes (optional)</Label>
-            <Textarea
-              id="notes"
-              placeholder="Add any notes about this test..."
-              value={formData.notes}
-              onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-              className="resize-none"
-              rows={2}
-            />
-          </div>
-
-          <Button 
-            type="submit" 
-            className="w-full btn-primary-gradient"
-            disabled={isSubmitting || !formData.metric_name || !formData.metric_value || !formData.unit}
+          <Label>Metric</Label>
+          <Select
+            value={form.metric_name}
+            onValueChange={(v) => {
+              const m = COMMON_METRICS.find(x => x.name === v);
+              setForm(f => ({ ...f, metric_name: v, unit: m?.unit || '' }));
+            }}
           >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Record
+            <SelectTrigger><SelectValue placeholder="Select metric" /></SelectTrigger>
+            <SelectContent>
+              {COMMON_METRICS.map(m => (
+                <SelectItem key={m.name} value={m.name}>{m.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Label>Test Date</Label>
+          <Input type="date" value={form.test_date} onChange={e => setForm(f => ({ ...f, test_date: e.target.value }))} />
+
+          <Label>Value</Label>
+          <Input type="number" placeholder="Value" value={form.metric_value} onChange={e => setForm(f => ({ ...f, metric_value: e.target.value }))} />
+
+          <Label>Unit</Label>
+          <Input placeholder="Unit" value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} />
+
+          <Label>Notes (optional)</Label>
+          <Textarea placeholder="Notes" value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
+
+          <Button disabled={loading} className="w-full">
+            <Plus className="mr-2 h-4 w-4" /> {loading ? 'Saving...' : 'Add Record'}
           </Button>
         </form>
       </CardContent>

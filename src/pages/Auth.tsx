@@ -1,58 +1,65 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, Mail, Lock, User, Loader2 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+import { Activity, Mail, Lock, User, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { signIn, signUp, user } = useAuth();
+  const { user, signIn, signUp } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
-  if (user) {
-    navigate('/dashboard');
-    return null;
-  }
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) navigate('/dashboard');
+  }, [user, navigate]);
 
+  // Handle Sign In
   const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     const formData = new FormData(e.currentTarget);
-    const { error } = await signIn(
-      formData.get('email') as string,
-      formData.get('password') as string
-    );
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+
+    const { error } = await signIn(email, password);
     setLoading(false);
+
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error, variant: "destructive" });
     } else {
       navigate('/dashboard');
     }
   };
 
-  const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setLoading(true);
-    const formData = new FormData(e.currentTarget);
-    const { error } = await signUp(
-      formData.get('email') as string,
-      formData.get('password') as string,
-      formData.get('fullName') as string
-    );
-    setLoading(false);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Success", description: "Account created! You can now sign in." });
-      navigate('/dashboard');
-    }
-  };
+  // Handle Sign Up
+const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault();
+  setLoading(true);
+  const formData = new FormData(e.currentTarget);
+  const fullName = formData.get('fullName') as string;
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+
+  // Correct order for backend useAuth
+  const { error } = await signUp(email, password, fullName);
+  setLoading(false);
+
+  if (error) {
+    toast({ title: "Error", description: error, variant: "destructive" });
+  } else {
+    toast({ title: "Success", description: "Account created! You can now sign in." });
+    navigate('/dashboard');
+  }
+};
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 p-4">
@@ -72,6 +79,8 @@ export default function Auth() {
               <TabsTrigger value="signin">Sign In</TabsTrigger>
               <TabsTrigger value="signup">Sign Up</TabsTrigger>
             </TabsList>
+
+            {/* SIGN IN TAB */}
             <TabsContent value="signin">
               <form onSubmit={handleSignIn} className="space-y-4">
                 <div className="space-y-2">
@@ -81,6 +90,7 @@ export default function Auth() {
                     <Input id="signin-email" name="email" type="email" placeholder="you@example.com" className="pl-10" required />
                   </div>
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="signin-password">Password</Label>
                   <div className="relative">
@@ -88,11 +98,14 @@ export default function Auth() {
                     <Input id="signin-password" name="password" type="password" placeholder="••••••••" className="pl-10" required />
                   </div>
                 </div>
+
                 <Button type="submit" className="w-full btn-primary-gradient" disabled={loading}>
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign In"}
                 </Button>
               </form>
             </TabsContent>
+
+            {/* SIGN UP TAB */}
             <TabsContent value="signup">
               <form onSubmit={handleSignUp} className="space-y-4">
                 <div className="space-y-2">
@@ -102,6 +115,7 @@ export default function Auth() {
                     <Input id="signup-name" name="fullName" placeholder="John Doe" className="pl-10" required />
                   </div>
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="signup-email">Email</Label>
                   <div className="relative">
@@ -109,6 +123,7 @@ export default function Auth() {
                     <Input id="signup-email" name="email" type="email" placeholder="you@example.com" className="pl-10" required />
                   </div>
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="signup-password">Password</Label>
                   <div className="relative">
@@ -116,6 +131,7 @@ export default function Auth() {
                     <Input id="signup-password" name="password" type="password" placeholder="••••••••" className="pl-10" minLength={6} required />
                   </div>
                 </div>
+
                 <Button type="submit" className="w-full btn-primary-gradient" disabled={loading}>
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Account"}
                 </Button>

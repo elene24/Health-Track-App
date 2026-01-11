@@ -3,6 +3,8 @@ const multer = require('multer');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const fs = require('fs');
+const bcrypt = require('bcrypt');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const port = 3000;
@@ -17,6 +19,16 @@ const db = new sqlite3.Database('./health.db', (err) => {
 });
 
 db.serialize(() => {
+  // Users table
+  db.run(`CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    full_name TEXT,
+    email TEXT UNIQUE,
+    password TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  // Records table
   db.run(`CREATE TABLE IF NOT EXISTS records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id TEXT,
@@ -30,12 +42,103 @@ db.serialize(() => {
 
 const upload = multer({ dest: 'uploads/' });
 
-// Simple Text Parser (Your Regex Logic)
+// --- Authentication Endpoints ---
+
+// SIGN UP
+app.post('/auth/signup', async (req, res) => {
+  const { fullName, email, password } = req.body;
+  if (!fullName || !email || !password) return res.status(400).json({ error: 'Missing fields' });
+
+  try {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const id = uuidv4();
+
+    db.run(
+      'INSERT INTO users (id, full_name, email, password) VALUES (?, ?, ?, ?)',
+      [id, fullName, email, hashedPassword],
+      function (err) {
+        if (err) {
+          if (err.message.includes('UNIQUE')) return res.status(400).json({ error: 'Email already exists' });
+          return res.status(500).json({ error: err.message });
+        }
+        res.json({ success: true, user: { id, fullName, email } });
+      }
+    );
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// SIGN IN
+app.post('/auth/signin', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
+
+  db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
+
+    res.json({ success: true, user: { id: user.id, fullName: user.full_name, email: user.email } });
+  });
+});
+
+// --- Health Records Endpoints ---
+
+// Upload File
+app.post('/upload', upload.single('file'), (req, res) => {
+  const userId = req.body.userId;
+  if (!req.file) return res.status(400).send('No file.');
+
+  fs.readFile(req.file.path, 'utf8', (err, data) => {
+    if (err) return res.status(500).send('Error reading file.');
+
+    const parsedRecords = parseHealthText(data, new Date().toISOString().split('T')[0]);
+
+    if (parsedRecords.length > 0) {
+      const stmt = db.prepare("INSERT INTO records (user_id, metric_name, metric_value, unit, test_date) VALUES (?, ?, ?, ?, ?)");
+      parsedRecords.forEach(r => {
+        stmt.run(userId, r.metric_name, r.metric_value, r.unit, r.test_date);
+      });
+      stmt.finalize();
+    }
+
+    fs.unlinkSync(req.file.path);
+    res.json({ success: true, records: parsedRecords });
+  });
+});
+
+// Manual Add
+app.post('/add', (req, res) => {
+  const { userId, records } = req.body;
+  const stmt = db.prepare("INSERT INTO records (user_id, metric_name, metric_value, unit, test_date) VALUES (?, ?, ?, ?, ?)");
+  records.forEach(r => {
+    stmt.run(userId, r.metric_name, r.metric_value, r.unit, r.test_date);
+  });
+  stmt.finalize();
+  res.json({ success: true });
+});
+
+// Get Records
+app.get('/records/:userId', (req, res) => {
+  const userId = req.params.userId;
+  if (!userId || userId === 'undefined') return res.json([]);
+  
+  db.all("SELECT * FROM records WHERE user_id = ? ORDER BY test_date DESC", [userId], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows);
+  });
+});
+
+// --- Utility Function ---
+
 function parseHealthText(text, defaultDate) {
   const lines = text.split('\n');
   const records = [];
   let extractedDate = defaultDate;
-  
+
   const dateMatch = text.match(/Date:\s*(\d{4}-\d{2}-\d{2})/i);
   if (dateMatch) extractedDate = dateMatch[1];
 
@@ -54,55 +157,9 @@ function parseHealthText(text, defaultDate) {
       });
     }
   });
+
   return records;
 }
 
-// ENDPOINT: Upload File
-app.post('/upload', upload.single('file'), (req, res) => {
-  const userId = req.body.userId;
-  if (!req.file) return res.status(400).send('No file.');
-
-  fs.readFile(req.file.path, 'utf8', (err, data) => {
-    if (err) return res.status(500).send('Error reading file.');
-    
-    const parsedRecords = parseHealthText(data, new Date().toISOString().split('T')[0]);
-    
-    if (parsedRecords.length > 0) {
-      const stmt = db.prepare("INSERT INTO records (user_id, metric_name, metric_value, unit, test_date) VALUES (?, ?, ?, ?, ?)");
-      parsedRecords.forEach(r => {
-        stmt.run(userId, r.metric_name, r.metric_value, r.unit, r.test_date);
-      });
-      stmt.finalize();
-    }
-    
-    fs.unlinkSync(req.file.path);
-    res.json({ success: true, records: parsedRecords });
-  });
-});
-
-// ENDPOINT: Manual Add
-app.post('/add', (req, res) => {
-  const { userId, records } = req.body;
-  const stmt = db.prepare("INSERT INTO records (user_id, metric_name, metric_value, unit, test_date) VALUES (?, ?, ?, ?, ?)");
-  records.forEach(r => {
-    stmt.run(userId, r.metric_name, r.metric_value, r.unit, r.test_date);
-  });
-  stmt.finalize();
-  res.json({ success: true });
-});
-
-// ENDPOINT: Get Records
-// In backend/server.js
-app.get('/records/:userId', (req, res) => {
-    const userId = req.params.userId;
-    // If user is 'undefined' from frontend, just return empty array instead of error
-    if (!userId || userId === 'undefined') {
-        return res.json([]);
-    }
-    db.all("SELECT * FROM records WHERE user_id = ? ORDER BY test_date DESC", [userId], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-    });
-});
-
+// Start Server
 app.listen(port, () => console.log(`✅ Backend running on http://localhost:${port}`));
