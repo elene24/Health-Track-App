@@ -72,27 +72,37 @@ export function useHealthRecords() {
   };
 
   // Upload file
-  const uploadFile = async (file: File) => {
-    if (!user) return { error: 'Not authenticated' };
+const uploadFile = async (file: File) => {
+  if (!user) return { error: 'Not authenticated' };
 
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('userId', user.id);
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('userId', user.id);
 
-    try {
-      const res = await fetch('http://localhost:3000/upload', {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Upload failed');
-      const data = await res.json();
-      await fetchRecords();
-      return data;
-    } catch (err) {
-      console.error('Upload error:', err);
-      return { error: 'Upload failed' };
+  try {
+    const res = await fetch('http://localhost:3000/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    // 🔍 DEBUG
+    console.log('UPLOAD status:', res.status);
+    console.log('UPLOAD response:', data);
+
+    if (!res.ok) {
+      return { error: data?.error || 'Upload failed', ...data };
     }
-  };
+
+    await fetchRecords();
+    return data; // { success:true, records:[...] }
+  } catch (err) {
+    console.error('Upload error:', err);
+    return { error: 'Upload failed' };
+  }
+};
+
 
   // Update a record
   const updateRecord = async (id: number | string, updatedFields: Partial<HealthRecord>) => {

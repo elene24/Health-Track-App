@@ -3,21 +3,22 @@ import { useDropzone } from 'react-dropzone';
 import { Upload, FileText, Loader2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { useHealthRecords } from '@/hooks/useHealthRecords';
+import { useHealthRecords, HealthRecord } from '@/hooks/useHealthRecords';
 import { useToast } from '@/hooks/use-toast';
 
 interface FileUploadZoneProps {
-  onDataParsed: (data: any) => void;
+  onDataParsed: (data: HealthRecord[]) => void;
 }
 
 export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
   const { uploadFile } = useHealthRecords();
   const { toast } = useToast();
+
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
 
   const onDrop = useCallback((files: File[]) => {
-    setFile(files[0]);
+    setFile(files?.[0] ?? null);
   }, []);
 
   const { getRootProps, getInputProps } = useDropzone({
@@ -31,16 +32,49 @@ export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
     setLoading(true);
 
     try {
-      const parsedData = await uploadFile(file);
-      if (parsedData?.metrics) {
-        onDataParsed(parsedData); // Pass parsed data to Upload.tsx
-        toast({ title: 'Success', description: 'File uploaded and parsed successfully' });
-      } else {
-        toast({ title: 'Error', description: 'No data found in file', variant: 'destructive' });
+      const result: any = await uploadFile(file);
+
+      // 🔍 DEBUG: inspect what uploadFile actually returned
+      console.log('uploadFile result:', result);
+
+      // If hook returned an error object
+      if (result && typeof result === 'object' && 'error' in result) {
+        toast({
+          title: 'Error',
+          description: String(result.error),
+          variant: 'destructive',
+        });
+        return;
       }
-    } catch (err) {
-      console.error(err);
-      toast({ title: 'Error', description: 'Upload failed', variant: 'destructive' });
+
+      // Expect backend response: { success: true, records: [...] }
+      const records: HealthRecord[] = result?.records ?? [];
+
+      if (records.length === 0) {
+        toast({
+          title: 'Error',
+          description: 'No data found in file',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      onDataParsed(records);
+
+      toast({
+        title: 'Success',
+        description: `Added ${records.length} record${records.length === 1 ? '' : 's'}`,
+      });
+
+      setFile(null);
+    } catch (err: any) {
+      console.error('Upload threw error:', err);
+
+      toast({
+        title: 'Error',
+        description: err?.message || 'Upload failed',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
