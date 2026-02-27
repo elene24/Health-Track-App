@@ -1,7 +1,7 @@
-import { Link } from 'react-router-dom';
-import { Activity, Upload, LineChart, Shield } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth';
+import { Link } from "react-router-dom";
+import { Activity, Upload, LineChart, Shield } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 
 const Index = () => {
   const { user } = useAuth();
@@ -15,24 +15,42 @@ const Index = () => {
           </div>
           <span className="text-lg font-semibold">HealthTrack</span>
         </div>
-        <Link to={user ? "/dashboard" : "/auth"}>
-          <Button>{user ? "Dashboard" : "Get Started"}</Button>
-        </Link>
+
+        <div className="flex gap-2">
+          <Link to="/access">
+            <Button variant="outline">Upload without login</Button>
+          </Link>
+
+          <Link to={user ? "/dashboard" : "/auth"}>
+            <Button>{user ? "Dashboard" : "Get Started"}</Button>
+          </Link>
+        </div>
       </header>
 
       <main className="container mx-auto px-4 py-20 text-center">
         <h1 className="text-4xl md:text-6xl font-bold tracking-tight mb-6 animate-fade-in">
-          Track Your Health,<br />
+          Track Your Health,
+          <br />
           <span className="text-primary">Understand Your Body</span>
         </h1>
+
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
           Upload blood test results, track metrics over time, and visualize your health journey with beautiful interactive charts.
         </p>
-        <Link to={user ? "/dashboard" : "/auth"}>
-          <Button size="lg" className="btn-primary-gradient text-lg px-8 py-6">
-            {user ? "Go to Dashboard" : "Start Tracking Free"}
-          </Button>
-        </Link>
+
+        <div className="flex flex-col sm:flex-row justify-center gap-3">
+          <Link to={user ? "/dashboard" : "/auth"}>
+            <Button size="lg" className="btn-primary-gradient text-lg px-8 py-6">
+              {user ? "Go to Dashboard" : "Start Tracking Free"}
+            </Button>
+          </Link>
+
+          <Link to="/access">
+            <Button size="lg" variant="outline" className="text-lg px-8 py-6">
+              Upload without login
+            </Button>
+          </Link>
+        </div>
 
         <div className="grid md:grid-cols-3 gap-8 mt-24 max-w-4xl mx-auto">
           {[

@@ -13,15 +13,16 @@ import Records from "./pages/Records";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 
+// ✅ NEW
+import Access from "./pages/Access";
+import GuestUpload from "./pages/GuestUpload";
+
 const queryClient = new QueryClient();
 
-// ProtectedRoute wrapper ensures user is logged in
 const ProtectedRoute = ({ children }: { children: JSX.Element }) => {
   const { user, loading } = useAuth();
-
-  if (loading) return null; // or a loading spinner
+  if (loading) return null;
   if (!user) return <Navigate to="/auth" replace />;
-
   return children;
 };
 
@@ -36,6 +37,10 @@ const App = () => (
             {/* Public routes */}
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+
+            {/* ✅ NEW public access */}
+            <Route path="/access" element={<Access />} />
+            <Route path="/guest/upload" element={<GuestUpload />} />
 
             {/* Protected routes */}
             <Route
@@ -71,7 +76,6 @@ const App = () => (
               }
             />
 
-            {/* 404 */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
