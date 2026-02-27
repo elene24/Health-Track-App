@@ -1,17 +1,19 @@
-import { useState, useCallback } from 'react';
-import { useDropzone } from 'react-dropzone';
-import { Upload, FileText, Loader2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { useHealthRecords, HealthRecord } from '@/hooks/useHealthRecords';
-import { useToast } from '@/hooks/use-toast';
+import { useState, useCallback } from "react";
+import { useDropzone } from "react-dropzone";
+import { Upload, FileText, Loader2 } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useHealthRecords } from "@/hooks/useHealthRecords";
+import { useToast } from "@/hooks/use-toast";
+import type { HealthRecord } from "@/lib/types";
 
 interface FileUploadZoneProps {
   onDataParsed: (data: HealthRecord[]) => void;
+  userId?: string; // ✅ for guest mode
 }
 
-export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
-  const { uploadFile } = useHealthRecords();
+export function FileUploadZone({ onDataParsed, userId }: FileUploadZoneProps) {
+  const { uploadFile } = useHealthRecords(userId);
   const { toast } = useToast();
 
   const [file, setFile] = useState<File | null>(null);
@@ -23,7 +25,7 @@ export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
 
   const { getRootProps, getInputProps } = useDropzone({
     onDrop,
-    accept: { 'text/plain': ['.txt'], 'application/pdf': ['.pdf'] },
+    accept: { "text/plain": [".txt"], "application/pdf": [".pdf"] },
     maxFiles: 1,
   });
 
@@ -34,27 +36,22 @@ export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
     try {
       const result: any = await uploadFile(file);
 
-      // 🔍 DEBUG: inspect what uploadFile actually returned
-      console.log('uploadFile result:', result);
-
-      // If hook returned an error object
-      if (result && typeof result === 'object' && 'error' in result) {
+      if (result && typeof result === "object" && "error" in result) {
         toast({
-          title: 'Error',
+          title: "Error",
           description: String(result.error),
-          variant: 'destructive',
+          variant: "destructive",
         });
         return;
       }
 
-      // Expect backend response: { success: true, records: [...] }
       const records: HealthRecord[] = result?.records ?? [];
 
       if (records.length === 0) {
         toast({
-          title: 'Error',
-          description: 'No data found in file',
-          variant: 'destructive',
+          title: "Error",
+          description: "No data found in file",
+          variant: "destructive",
         });
         return;
       }
@@ -62,18 +59,16 @@ export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
       onDataParsed(records);
 
       toast({
-        title: 'Success',
-        description: `Added ${records.length} record${records.length === 1 ? '' : 's'}`,
+        title: "Success",
+        description: `Added ${records.length} record${records.length === 1 ? "" : "s"}`,
       });
 
       setFile(null);
     } catch (err: any) {
-      console.error('Upload threw error:', err);
-
       toast({
-        title: 'Error',
-        description: err?.message || 'Upload failed',
-        variant: 'destructive',
+        title: "Error",
+        description: err?.message || "Upload failed",
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -98,7 +93,7 @@ export function FileUploadZone({ onDataParsed }: FileUploadZoneProps) {
               <FileText /> {file.name}
             </div>
             <Button onClick={handleUpload} disabled={loading} className="w-full">
-              {loading ? <Loader2 className="animate-spin" /> : 'Upload & Process'}
+              {loading ? <Loader2 className="animate-spin" /> : "Upload & Process"}
             </Button>
           </>
         )}

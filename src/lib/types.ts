@@ -1,5 +1,7 @@
+// src/lib/types.ts
+
 export interface HealthRecord {
-  id: string;
+  id: number;
   user_id: string;
   test_date: string;
   metric_name: string;
@@ -8,7 +10,7 @@ export interface HealthRecord {
   notes: string | null;
   source: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string | null;
 }
 
 export interface Profile {
@@ -64,5 +66,5 @@ export const METRIC_COLORS: Record<string, string> = {
   "LDL Cholesterol": "hsl(var(--chart-5))",
   "Triglycerides": "hsl(var(--primary))",
   "Hemoglobin": "hsl(var(--accent))",
-  "default": "hsl(var(--chart-1))",
+  default: "hsl(var(--chart-1))",
 };
